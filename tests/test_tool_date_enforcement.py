@@ -62,6 +62,7 @@ DATED_TOOLS = [
     tools.get_indicators,
     tools.get_macro_indicators,
     tools.get_verified_market_snapshot,
+    tools.get_market_emotion,
 ]
 
 

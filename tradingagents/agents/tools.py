@@ -12,6 +12,7 @@ from langgraph.prebuilt import InjectedState
 from tradingagents.dataflows.date_window import as_of, as_of_window
 from tradingagents.dataflows.errors import NoMarketDataError, VendorUnavailableError
 from tradingagents.dataflows.router import no_data_available, route_to_vendor, vendor_unavailable
+from tradingagents.dataflows.vendors.htsc_mcp import clamp_window
 from tradingagents.dataflows.vendors.yahoo.snapshot import build_verified_market_snapshot
 
 
@@ -92,6 +93,33 @@ def get_verified_market_snapshot(
         return vendor_unavailable("get_verified_market_snapshot", exc)
     except NoMarketDataError as exc:
         return no_data_available(exc)
+
+
+@tool
+def get_market_emotion(
+    market: Annotated[
+        Literal["A", "HK"],
+        "Which market's sentiment index: 'A' for A-shares, 'HK' for Hong Kong",
+    ] = "A",
+    start_date: Annotated[
+        str | None, "Start date in yyyy-mm-dd format; omit for the recent window"
+    ] = None,
+    end_date: Annotated[
+        str | None, "End date in yyyy-mm-dd format; omit to use the analysis date"
+    ] = None,
+    trade_date: Annotated[str, InjectedState("trade_date")] = "",
+) -> str:
+    """A-share or Hong Kong market sentiment index from Huatai research (华泰智研).
+
+    A market-level reading in percent, not the instrument's own price. 'A' is
+    the A-share index and 'HK' is the Hong Kong index. Dates are clamped to the
+    analysis date. Attribute figures from this tool to 华泰智研MCP数据服务.
+    """
+    try:
+        start_date, end_date = clamp_window(start_date, end_date, trade_date)
+    except ValueError as exc:
+        return str(exc)
+    return route_to_vendor("get_market_emotion", market, start_date, end_date)
 
 
 @tool
