@@ -87,6 +87,36 @@ def test_a_failed_query_returns_the_server_message():
     assert htsc_mcp._unwrap(htsc_mcp._content_text(htsc_mcp._rpc(raw))) == "无数据"
 
 
+def _http_response(body: bytes, content_type: str) -> requests.Response:
+    response = requests.Response()
+    response.status_code = 200
+    response._content = body
+    response.headers["Content-Type"] = content_type
+    response.encoding = requests.utils.get_encoding_from_headers(response.headers)
+    return response
+
+
+@pytest.mark.unit
+def test_an_event_stream_without_charset_is_read_as_utf8(monkeypatch):
+    # 「情」is UTF-8 E6 83 85. Decoded as ISO-8859-1, 0x85 becomes a line break
+    # and the JSON-RPC data line is cut in half.
+    monkeypatch.setenv("HTSC_APP_KEY", "sk_test_key")
+    text = json.dumps(
+        {"status": "success", "message": "查询成功", "data": TABLE},
+        ensure_ascii=False,
+    )
+    payload = {"jsonrpc": "2.0", "id": 1, "result": {"content": [{"type": "text", "text": text}], "isError": False}}
+    raw = ("event: message\r\ndata: " + json.dumps(payload, ensure_ascii=False) + "\r\n\r\n").encode()
+    assert b"\x85" in raw
+    response = _http_response(raw, "text/event-stream")
+    assert response.encoding == "ISO-8859-1"
+
+    monkeypatch.setattr(htsc_mcp.requests, "post", lambda *a, **k: response)
+    out = htsc_mcp.call_tool("get_market_emotion", {"market": "HK"})
+    assert "48.20" in out
+    assert "市场情绪指数" in out
+
+
 @pytest.mark.unit
 def test_an_http_error_does_not_carry_the_app_key(monkeypatch):
     monkeypatch.setenv("HTSC_APP_KEY", "sk_test_key")

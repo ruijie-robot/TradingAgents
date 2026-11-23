@@ -99,7 +99,19 @@ def call_tool(name: str, arguments: dict) -> str:
         response.raise_for_status()
     except requests.RequestException as exc:
         raise VendorUnavailableError(str(exc).replace(key, "***")) from None
-    return _content_text(_rpc(response.text))
+    return _content_text(_rpc(_body_text(response)))
+
+
+def _body_text(response: requests.Response) -> str:
+    """The body as text. An SSE stream with no charset is UTF-8.
+
+    ``text/event-stream`` without a charset makes ``response.text`` decode as
+    ISO-8859-1. A UTF-8 continuation byte ``0x85`` then becomes U+0085, and
+    ``splitlines()`` cuts the JSON-RPC line inside a Chinese character.
+    """
+    if "charset" not in response.headers.get("Content-Type", "").lower():
+        response.encoding = "utf-8"
+    return response.text
 
 
 def _market(market: str) -> str:
